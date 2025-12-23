@@ -1,0 +1,173 @@
+version: '3.8'
+
+services:
+  # ============================================================================
+  # POSTGRES
+  # ============================================================================
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: patent_radar
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./data/schemas:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # REDIS (for Celery tasks)
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # MINIO (S3-compatible object storage)
+  # ============================================================================
+  minio:
+    image: minio/minio:latest
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # QDRANT (vector database)
+  # ============================================================================
+  qdrant:
+    image: qdrant/qdrant:latest
+    environment:
+      QDRANT_API_KEY: qdrant_key_123
+    volumes:
+      - qdrant_data:/qdrant/storage
+    ports:
+      - "6333:6333"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # NEO4J (graph database)
+  # ============================================================================
+  neo4j:
+    image: neo4j:5
+    environment:
+      NEO4J_AUTH: neo4j/password123
+      NEO4J_PLUGINS: '["apoc"]'
+    volumes:
+      - neo4j_data:/var/lib/neo4j/data
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7474"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # PROMETHEUS
+  # ============================================================================
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+
+  # ============================================================================
+  # GRAFANA
+  # ============================================================================
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/monitoring/grafana-dashboards:/etc/grafana/provisioning/dashboards
+      - ./infra/monitoring/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
+    ports:
+      - "3000:3000"
+
+  # ============================================================================
+  # LOKI (log aggregation)
+  # ============================================================================
+  loki:
+    image: grafana/loki:latest
+    volumes:
+      - ./infra/monitoring/loki-config.yml:/etc/loki/local-config.yml
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yml
+
+  # ============================================================================
+  # TEMPO (distributed tracing)
+  # ============================================================================
+  tempo:
+    image: grafana/tempo:latest
+    volumes:
+      - ./infra/monitoring/tempo-config.yml:/etc/tempo.yml
+      - tempo_data:/var/tempo
+    ports:
+      - "3200:3200"
+      - "4317:4317"  # OTLP gRPC receiver
+    command: -config.file=/etc/tempo.yml
+
+  # ============================================================================
+  # FASTAPI BACKEND (API service disabled for now - will run locally with venv)
+  # ============================================================================
+  # api:
+  #   To run API locally instead: source venv/bin/activate && python -m uvicorn services/api/main:app --host 0.0.0.0 --port 8000
+
+  # ============================================================================
+  # STREAMLIT UI (UI service disabled for now - will run locally with venv)
+  # ============================================================================
+  # ui:
+  #   To run UI locally instead: source venv/bin/activate && streamlit run services/ui/app.py
+
+  # ============================================================================
+  # CELERY WORKER (Celery service disabled for now - will run locally with venv)
+  # ============================================================================
+  # celery:
+  #   To run Celery locally instead: source venv/bin/activate && celery -A tasks worker --loglevel=info
+
+volumes:
+  postgres_data:
+  minio_data:
+  qdrant_data:
+  neo4j_data:
+  prometheus_data:
+  grafana_data:
+  loki_data:
+  tempo_data:
