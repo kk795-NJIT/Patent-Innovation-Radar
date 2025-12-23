@@ -1,0 +1,89 @@
+# Prometheus Alert Rules for Patent Radar
+
+groups:
+  - name: patent_radar_alerts
+    interval: 30s
+    rules:
+      # Data Pipeline Alerts
+      - alert: HighIngestionLag
+        expr: patent_ingestion_lag_hours > 24
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Patent ingestion lag exceeds 24 hours"
+          description: "Last ingestion was {{ $value }} hours ago"
+
+      - alert: LowEmbeddingCoverage
+        expr: embeddings_computed / patent_count_total < 0.9
+        for: 6h
+        labels:
+          severity: critical
+        annotations:
+          summary: "Less than 90% patents have embeddings"
+          description: "Coverage: {{ $value | humanizePercentage }}"
+
+      - alert: TopicModelStale
+        expr: (time() - topic_model_last_updated_seconds) / 3600 > 168
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Topic model not updated for > 1 week"
+
+      # API Alerts
+      - alert: HighAPIErrorRate
+        expr: rate(api_requests_total{status=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API error rate > 5%"
+          description: "{{ $value | humanize }} errors/sec"
+
+      - alert: SlowAPILatency
+        expr: api_request_latency_p95 > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API p95 latency > 1 second"
+          description: "p95: {{ $value }}ms"
+
+      # Database Alerts
+      - alert: HighDBConnections
+        expr: pg_stat_activity_count > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Database connection pool approaching limit"
+          description: "Active connections: {{ $value }}"
+
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL is down"
+
+      # Alert Quality
+      - alert: AlertPrecisionLow
+        expr: alert_precision_ratio < 0.7
+        for: 24h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Alert precision has dropped below 70%"
+          description: "Current precision: {{ $value | humanizePercentage }}"
+
+      # Model Drift
+      - alert: HighModelDrift
+        expr: model_drift_detected == 1
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Data drift detected in production model"
+          description: "Drift score: {{ $value }}"

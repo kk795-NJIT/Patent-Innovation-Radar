@@ -1,0 +1,43 @@
+# Tempo Configuration for Distributed Tracing
+
+server:
+  http_listen_port: 3200
+  grpc_listen_port: 4317
+
+querier:
+  max_concurrent_queries: 20
+  search:
+    max_result_limit: 20
+
+distributor:
+  ring:
+    kvstore:
+      store: inmemory
+
+ingester:
+  lifecycler:
+    ring:
+      kvstore:
+        store: inmemory
+      replication_factor: 1
+  trace_idle_period: 10s
+  max_block_bytes: 1_000_000
+  max_spans_per_trace: 10_000
+
+compactor:
+  compaction:
+    block_retention: 1h
+    compacted_block_retention: 10m
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/traces
+    wal:
+      path: /var/tempo/wal
+
+metrics_generator:
+  registry:
+    external_labels:
+      cluster: patent-radar
